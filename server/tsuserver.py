@@ -81,6 +81,7 @@ class TsuServer3:
             self.load_backgrounds()
             self.load_ipranges()
             self.load_gimps()
+            self.load_prompts()
             self.load_miscdata()
             self.save_miscdata()
         except yaml.YAMLError as exc:
@@ -252,6 +253,10 @@ class TsuServer3:
     def load_gimps(self):
         with open('config/gimp.yaml', 'r', encoding='utf-8') as gmp:
             self.gimp_list = yaml.safe_load(gmp)
+
+    def load_prompts(self):
+        with open('config/prompt.yaml', 'r', encoding='utf-8') as pmpt:
+            self.prompts = yaml.safe_load(pmpt)
 
     def load_miscdata(self):
         with open('config/data.yaml', 'r', encoding='utf-8') as data:
@@ -469,6 +474,8 @@ class TsuServer3:
          - Characters
          - Music
          - Backgrounds
+         - Gimp lines
+         - Prompts
          - Commands
          - Banlists
          - Misc Data
@@ -501,6 +508,8 @@ class TsuServer3:
         self.load_iniswaps()
         self.load_music()
         self.load_backgrounds()
+        self.load_gimps()
+        self.load_prompts()
         self.load_ipranges()
         self.load_miscdata()
 

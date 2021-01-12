@@ -23,7 +23,8 @@ __all__ = [
     'ooc_cmd_afk',
     'ooc_cmd_prompt',
     'ooc_cmd_case',
-    'ooc_cmd_asspull'
+    'ooc_cmd_asspull',
+    'ooc_cmd_keywords'
 ]
 
 
@@ -489,3 +490,15 @@ def generate_prompt(keyword, choiceKey, layer = 0, numSelects = 1 , repeat = Fal
         output = str(keyword).upper()
 
     return output
+
+def ooc_cmd_keywords(client, arg):
+    '''
+    Prints the current keywords in prompt.yaml
+    Usage: /keywords
+    '''
+    if len(arg) != 0:
+        raise ArgumentError('This command does not take any arguments.')
+    key_msg = "These are the current valid keywords: "
+    key_msg += ', '.join(client.server.prompts.keys())
+    client.send_ooc(key_msg)
+        

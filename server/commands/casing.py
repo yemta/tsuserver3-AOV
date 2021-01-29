@@ -1,4 +1,5 @@
 import re
+import random
 
 from server import database
 from server.constants import TargetType
@@ -19,7 +20,11 @@ __all__ = [
     'ooc_cmd_unblockwtce',
     'ooc_cmd_judgelog',
     'ooc_cmd_evidlog',
-    'ooc_cmd_afk'
+    'ooc_cmd_afk',
+    'ooc_cmd_prompt',
+    'ooc_cmd_case',
+    'ooc_cmd_asspull',
+    'ooc_cmd_keywords'
 ]
 
 
@@ -330,3 +335,170 @@ def ooc_cmd_evidlog(client, arg):
 
 def ooc_cmd_afk(client, arg):
     client.server.client_manager.toggle_afk(client)
+
+def ooc_cmd_prompt(client, arg):
+    """
+    Generate a random prompt using a keyword.
+    The generated prompt is not publicly broadcasted.
+    Usage: /prompt <keyword>
+    """
+    if len(arg) == 0:
+        raise ArgumentError('You must specify a keyword. Use /prompt <keyword>.')
+    try:
+        prmt_msg = f"You generated the following prompt from {arg}:\n"
+        prmt_msg += generate_prompt(arg,client.server.prompts)
+        client.send_ooc(prmt_msg)
+    except:
+        raise ArgumentError('unknown error while generating prompt')
+
+def ooc_cmd_case(client, arg):
+    """
+    Generate a random case premise.
+    The generated case is not publicly broadcasted.
+    Usage: /case
+    """
+    case_prompt = 'murder'
+    if len(arg) != 0:
+        raise ArgumentError('This command does not take any arguments.')
+    case_msg = generate_prompt(case_prompt,client.server.prompts)
+    client.send_ooc(case_msg)
+
+def ooc_cmd_asspull(client, arg):
+    """
+    Generate a random number of asspulls (default 1, max 5).
+    The generated asspulls is not publicly broadcasted.
+    Usage: /asspull, /asspull <number>
+    """
+    asspull_prompt = 'asspull'
+    if len(arg) == 0:
+        amount = 1
+    else:
+        try:
+            amount = int(arg)
+        except:
+            raise ArgumentError('You must enter a number. Use /asspull <num>')
+    if (amount > 5 or amount < 1) :
+        raise ArgumentError('Number must be between 1 and 5')
+    asspull_msg = generate_prompt(asspull_prompt,client.server.prompts,0,amount, True)
+    client.send_ooc(asspull_msg)
+
+
+def select_prompt(items, amount = 1, allowRepeat = False):
+    #if items isn't a list, turn it into a list with the required amount of entries
+    if not isinstance(items,list) :
+        placeHolder = []
+        for x in range(amount) :
+            placeHolder.append(items)
+        items = placeHolder
+    #if length of items is less than the amount required, allowRepeat is forced on
+    if len(items) < amount :
+        allowRepeat = True
+
+    #the part where it actually selects an item. Declares the output as a string
+    output = ''
+    #repeats the process for the amount of times requested
+    for x in range(amount) :
+        #text stores the choice while stuff is applied to it
+        text = random.choice(items)
+        #if this is the first entry, add it as is
+        if x == 0 :
+            output += str(text)
+        #if this is the last entry, preface it with " and " 
+        elif x + 1 == amount :
+            output += ' and ' + str(text)
+        #if it's an entry inbetween, preface it with a comma separator
+        else:
+            output += ', ' + str(text)
+
+        #if allowRepeat is disabled, remove the entry from items for future pulls
+        #particular placement of element in list *shouldn't* matter, but it needs to be fixed if it does
+        if not allowRepeat :
+            items.remove(text)
+
+    return output
+
+def generate_prompt(keyword, choiceKey, layer = 0, numSelects = 1 , repeat = False):
+    #declare wildcard format string, and any modifiers needed
+    wildCardStart = '?{'
+    wildCardEnd = '}'
+    numMod = '|'
+    repMod = '%'
+    rangeMod = '-'
+    
+    #attempt to load up choices from keyword
+    try :
+        
+        #throws exception if list goes too deep
+        if layer > 5:
+            raise Exception()
+        #load up lists of prompts from keyword into choices
+        choices = choiceKey[keyword].copy()
+
+        #set output prompt to a random selection from choices
+        output = select_prompt(choices, numSelects, repeat)
+
+        #run this code as long as a wildcard is found in the output prompt
+        #more specifically, it checks if the starting string exists first
+        #then if the last example of the ending string is after the earliest starting string
+        while (output.find(wildCardStart) > -1) and (output.rfind(wildCardEnd) > output.find(wildCardStart)) :
+            #grabs the wildcard from its formatting
+            wildCard = output[output.find(wildCardStart):output.find(wildCardEnd,
+                                                                     output.find(wildCardStart)) + len(wildCardEnd)]
+            wildCard = wildCard[len(wildCardStart):(0-len(wildCardEnd))]
+            #tells the program to stick to default values
+            useDefSel = True
+            useDefRep = True
+            
+            #if the wildcard contains a modifier for number
+            if numMod in wildCard :
+                useDefSel = False
+                #splits the wildcard by the numMod string
+                sep = wildCard.split(numMod,1)
+                wildCard = sep[0]
+                if repMod in sep[1] : #checks for the repeat modifier in the wildcard
+                #since the repeat option is useless outside of mulitple options,
+                #it doesn't check unless the number of choices is modified
+                    useDefRep = False
+                    sep = sep[1].split(repMod,1)
+                    select = sep[0]
+                else:
+                    select = sep[1]
+
+                if rangeMod in select :
+                    low = int(select.split(rangeMod)[0])
+                    high = int(select.split(rangeMod)[1])
+                    select = random.choice(range(low,high))
+
+                select = int(select)
+
+            #generates a new prompt using the given keyword by recursively running generate_prompt
+            if (useDefSel and useDefRep) :
+                newPrompt = generate_prompt(wildCard, choiceKey, layer+1)
+                full = wildCardStart + wildCard + wildCardEnd
+            elif (not useDefSel and useDefRep) :
+                newPrompt = generate_prompt(wildCard, choiceKey, layer+1, select)
+                full = wildCardStart + wildCard + numMod + sep[1] + wildCardEnd
+            else :
+                newPrompt = generate_prompt(wildCard, choiceKey, layer+1, select, True)
+                full = wildCardStart + wildCard + numMod + sep[0] + repMod + wildCardEnd
+
+            #replaces a single instance of the wildcard with the new prompt
+            output = str(output).replace(full, newPrompt, 1)
+            
+    #if an error occurs, return the keyword in uppercase
+    except Exception as F:
+        output = str(keyword).upper()
+
+    return output
+
+def ooc_cmd_keywords(client, arg):
+    '''
+    Prints the current keywords in prompt.yaml
+    Usage: /keywords
+    '''
+    if len(arg) != 0:
+        raise ArgumentError('This command does not take any arguments.')
+    key_msg = "These are the current valid keywords: "
+    key_msg += ', '.join(client.server.prompts.keys())
+    client.send_ooc(key_msg)
+        
